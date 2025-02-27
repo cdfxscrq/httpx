@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 from enum import IntEnum
+
+__all__ = ["codes"]
 
 
 class codes(IntEnum):
@@ -21,11 +25,11 @@ class codes(IntEnum):
         * RFC 8470: Using Early Data in HTTP
     """
 
-    def __new__(cls, value: int, phrase: str = "") -> "codes":
-        obj = int.__new__(cls, value)  # type: ignore
+    def __new__(cls, value: int, phrase: str = "") -> codes:
+        obj = int.__new__(cls, value)
         obj._value_ = value
 
-        obj.phrase = phrase  # type: ignore
+        obj.phrase = phrase  # type: ignore[attr-defined]
         return obj
 
     def __str__(self) -> str:

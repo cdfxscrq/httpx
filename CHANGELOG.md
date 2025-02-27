@@ -4,6 +4,236 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## 0.28.1 (6th December, 2024)
+
+* Fix SSL case where `verify=False` together with client side certificates.
+ 
+## 0.28.0 (28th November, 2024)
+
+Be aware that the default *JSON request bodies now use a more compact representation*. This is generally considered a prefered style, tho may require updates to test suites.
+
+The 0.28 release includes a limited set of deprecations...
+
+**Deprecations**:
+
+We are working towards a simplified SSL configuration API.
+
+*For users of the standard `verify=True` or `verify=False` cases, or `verify=<ssl_context>` case this should require no changes. The following cases have been deprecated...*
+
+* The `verify` argument as a string argument is now deprecated and will raise warnings.
+* The `cert` argument is now deprecated and will raise warnings.
+
+Our revised [SSL documentation](docs/advanced/ssl.md) covers how to implement the same behaviour with a more constrained API.
+
+**The following changes are also included**:
+
+* The deprecated `proxies` argument has now been removed.
+* The deprecated `app` argument has now been removed.
+* JSON request bodies use a compact representation. (#3363)
+* Review URL percent escape sets, based on WHATWG spec. (#3371, #3373)
+* Ensure `certifi` and `httpcore` are only imported if required. (#3377)
+* Treat `socks5h` as a valid proxy scheme. (#3178)
+* Cleanup `Request()` method signature in line with `client.request()` and `httpx.request()`. (#3378)
+* Bugfix: When passing `params={}`, always strictly update rather than merge with an existing querystring. (#3364)
+
+## 0.27.2 (27th August, 2024)
+
+### Fixed
+
+* Reintroduced supposedly-private `URLTypes` shortcut. (#2673)
+
+## 0.27.1 (27th August, 2024)
+
+### Added
+
+* Support for `zstd` content decoding using the python `zstandard` package is added. Installable using `httpx[zstd]`. (#3139)
+
+### Fixed
+
+* Improved error messaging for `InvalidURL` exceptions. (#3250)
+* Fix `app` type signature in `ASGITransport`. (#3109)
+
+## 0.27.0 (21st February, 2024)
+
+### Deprecated
+
+* The `app=...` shortcut has been deprecated. Use the explicit style of `transport=httpx.WSGITransport()` or `transport=httpx.ASGITransport()` instead.
+
+### Fixed
+
+* Respect the `http1` argument while configuring proxy transports. (#3023)
+* Fix RFC 2069 mode digest authentication. (#3045)
+
+## 0.26.0 (20th December, 2023)
+
+### Added
+
+* The `proxy` argument was added. You should use the `proxy` argument instead of the deprecated `proxies`, or use `mounts=` for more complex configurations. (#2879)
+
+### Deprecated
+
+* The `proxies` argument is now deprecated. It will still continue to work, but it will be removed in the future. (#2879)
+
+### Fixed
+
+* Fix cases of double escaping of URL path components. Allow / as a safe character in the query portion. (#2990)
+* Handle `NO_PROXY` envvar cases when a fully qualified URL is supplied as the value. (#2741)
+* Allow URLs where username or password contains unescaped '@'. (#2986)
+* Ensure ASGI `raw_path` does not include URL query component. (#2999)
+* Ensure `Response.iter_text()` cannot yield empty strings. (#2998)
+
+## 0.25.2 (24th November, 2023)
+
+### Added
+
+* Add missing type hints to few `__init__()` methods. (#2938)
+
+## 0.25.1 (3rd November, 2023)
+
+### Added
+
+* Add support for Python 3.12. (#2854)
+* Add support for httpcore 1.0 (#2885)
+
+### Fixed
+
+* Raise `ValueError` on `Response.encoding` being set after `Response.text` has been accessed. (#2852)
+
+## 0.25.0 (11th September, 2023)
+
+### Removed
+
+* Drop support for Python 3.7. (#2813)
+
+### Added
+
+* Support HTTPS proxies. (#2845)
+* Change the type of `Extensions` from `Mapping[Str, Any]` to `MutableMapping[Str, Any]`. (#2803)
+* Add `socket_options` argument to `httpx.HTTPTransport` and `httpx.AsyncHTTPTransport` classes. (#2716)
+* The `Response.raise_for_status()` method now returns the response instance. For example: `data = httpx.get('...').raise_for_status().json()`. (#2776)
+
+### Fixed
+
+* Return `500` error response instead of exceptions when `raise_app_exceptions=False` is set on `ASGITransport`. (#2669)
+* Ensure all `WSGITransport` environs have a `SERVER_PROTOCOL`. (#2708)
+* Always encode forward slashes as `%2F` in query parameters (#2723)
+* Use Mozilla documentation instead of `httpstatuses.com` for HTTP error reference (#2768)
+
+## 0.24.1 (17th May, 2023)
+
+### Added
+
+* Provide additional context in some `InvalidURL` exceptions. (#2675)
+
+### Fixed
+
+* Fix optional percent-encoding behaviour. (#2671)
+* More robust checking for opening upload files in binary mode. (#2630)
+* Properly support IP addresses in `NO_PROXY` environment variable. (#2659)
+* Set default file for `NetRCAuth()` to `None` to use the stdlib default. (#2667)
+* Set logging request lines to INFO level for async requests, in line with sync requests. (#2656)
+* Fix which gen-delims need to be escaped for path/query/fragment components in URL. (#2701)
+
+## 0.24.0 (6th April, 2023)
+
+### Changed
+
+* The logging behaviour has been changed to be more in-line with other standard Python logging usages. We no longer have a custom `TRACE` log level, and we no longer use the `HTTPX_LOG_LEVEL` environment variable to auto-configure logging. We now have a significant amount of `DEBUG` logging available at the network level. Full documentation is available at https://www.python-httpx.org/logging/ (#2547, encode/httpcore#648)
+* The `Response.iter_lines()` method now matches the stdlib behaviour and does not include the newline characters. It also resolves a performance issue. (#2423)
+* Query parameter encoding switches from using + for spaces and %2F for forward slash, to instead using %20 for spaces and treating forward slash as a safe, unescaped character. This differs from `requests`, but is in line with browser behavior in Chrome, Safari, and Firefox. Both options are RFC valid. (#2543)
+* NetRC authentication is no longer automatically handled, but is instead supported by an explicit `httpx.NetRCAuth()` authentication class. See the documentation at https://www.python-httpx.org/advanced/authentication/#netrc-authentication (#2525)
+
+### Removed
+
+* The `rfc3986` dependancy has been removed. (#2252)
+
+## 0.23.3 (4th January, 2023)
+
+### Fixed
+
+* Version 0.23.2 accidentally included stricter type checking on query parameters. This shouldn've have been included in a minor version bump, and is now reverted. (#2523, #2539)
+
+## 0.23.2 (2nd January, 2023)
+
+### Added
+
+* Support digest auth nonce counting to avoid multiple auth requests. (#2463)
+
+### Fixed
+
+* Multipart file uploads where the file length cannot be determine now use chunked transfer encoding, rather than loading the entire file into memory in order to determine the `Content-Length`. (#2382)
+* Raise `TypeError` if content is passed a dict-instance. (#2495)
+* Partially revert the API breaking change in 0.23.1, which removed `RawURL`. We continue to expose a `url.raw` property which is now a plain named-tuple. This API is still expected to be deprecated, but we will do so with a major version bump. (#2481)
+
+## 0.23.1 (18th November, 2022)
+
+**Note**: The 0.23.1 release should have used a proper version bump, rather than a minor point release.
+There are API surface area changes that may affect some users.
+See the "Removed" section of these release notes for details.
+
+### Added
+
+* Support for Python 3.11. (#2420)
+* Allow setting an explicit multipart boundary in `Content-Type` header. (#2278)
+* Allow `tuple` or `list` for multipart values, not just `list`. (#2355)
+* Allow `str` content for multipart upload files. (#2400)
+* Support connection upgrades. See https://www.encode.io/httpcore/extensions/#upgrade-requests
+
+### Fixed
+
+* Don't drop empty query parameters. (#2354)
+
+### Removed
+
+* Upload files *must* always be opened in binary mode. (#2400)
+* Drop `.read`/`.aread` from `SyncByteStream`/`AsyncByteStream`. (#2407)
+* Drop `RawURL`. (#2241)
+
+## 0.23.0 (23rd May, 2022)
+
+### Changed
+
+* Drop support for Python 3.6. (#2097)
+* Use `utf-8` as the default character set, instead of falling back to `charset-normalizer` for auto-detection. To enable automatic character set detection, see [the documentation](https://www.python-httpx.org/advanced/text-encodings/#using-auto-detection). (#2165)
+
+### Fixed
+
+* Fix `URL.copy_with` for some oddly formed URL cases. (#2185)
+* Digest authentication should use case-insensitive comparison for determining which algorithm is being used. (#2204)
+* Fix console markup escaping in command line client. (#1866)
+* When files are used in multipart upload, ensure we always seek to the start of the file. (#2065)
+* Ensure that `iter_bytes` never yields zero-length chunks. (#2068)
+* Preserve `Authorization` header for redirects that are to the same origin, but are an `http`-to-`https` upgrade. (#2074)
+* When responses have binary output, don't print the output to the console in the command line client. Use output like `<16086 bytes of binary data>` instead. (#2076)
+* Fix display of `--proxies` argument in the command line client help. (#2125)
+* Close responses when task cancellations occur during stream reading. (#2156)
+* Fix type error on accessing `.request` on `HTTPError` exceptions. (#2158)
+
+## 0.22.0 (26th January, 2022)
+
+### Added
+
+* Support for [the SOCKS5 proxy protocol](https://www.python-httpx.org/advanced/proxies/#socks) via [the `socksio` package](https://github.com/sethmlarson/socksio). (#2034)
+* Support for custom headers in multipart/form-data requests (#1936)
+
+### Fixed
+
+* Don't perform unreliable close/warning on `__del__` with unclosed clients. (#2026)
+* Fix `Headers.update(...)` to correctly handle repeated headers (#2038)
+
+## 0.21.3 (6th January, 2022)
+
+### Fixed
+
+* Fix streaming uploads using `SyncByteStream` or `AsyncByteStream`. Regression in 0.21.2. (#2016)
+
+## 0.21.2 (5th January, 2022)
+
+### Fixed
+
+* HTTP/2 support for tunnelled proxy cases. (#2009)
+* Improved the speed of large file uploads. (#1948)
+
 ## 0.21.1 (16th November, 2021)
 
 ### Fixed
@@ -138,7 +368,7 @@ finally:
 
 The 0.18.x release series formalises our low-level Transport API, introducing the base classes `httpx.BaseTransport` and `httpx.AsyncBaseTransport`.
 
-See the "[Writing custom transports](https://www.python-httpx.org/advanced/#writing-custom-transports)" documentation and the [`httpx.BaseTransport.handle_request()`](https://github.com/encode/httpx/blob/397aad98fdc8b7580a5fc3e88f1578b4302c6382/httpx/_transports/base.py#L77-L147) docstring for more complete details on implementing custom transports.
+See the "[Custom transports](https://www.python-httpx.org/advanced/transports/#custom-transports)" documentation and the [`httpx.BaseTransport.handle_request()`](https://github.com/encode/httpx/blob/397aad98fdc8b7580a5fc3e88f1578b4302c6382/httpx/_transports/base.py#L77-L147) docstring for more complete details on implementing custom transports.
 
 Pull request #1522 includes a checklist of differences from the previous `httpcore` transport API, for developers implementing custom transports.
 
@@ -392,7 +622,7 @@ See pull requests #1057, #1058.
 
 * Added dedicated exception class `httpx.HTTPStatusError` for `.raise_for_status()` exceptions. (Pull #1072)
 * Added `httpx.create_ssl_context()` helper function. (Pull #996)
-* Support for proxy exlcusions like `proxies={"https://www.example.com": None}`. (Pull #1099)
+* Support for proxy exclusions like `proxies={"https://www.example.com": None}`. (Pull #1099)
 * Support `QueryParams(None)` and `client.params = None`. (Pull #1060)
 
 ### Changed
@@ -455,7 +685,7 @@ This release switches to `httpcore` for all the internal networking, which means
 
 It also means we've had to remove our UDS support, since maintaining that would have meant having to push back our work towards a 1.0 release, which isn't a trade-off we wanted to make.
 
-We also now have [a public "Transport API"](https://www.python-httpx.org/advanced/#custom-transports), which you can use to implement custom transport implementations against. This formalises and replaces our previously private "Dispatch API".
+We also now have [a public "Transport API"](https://www.python-httpx.org/advanced/transports/#custom-transports), which you can use to implement custom transport implementations against. This formalises and replaces our previously private "Dispatch API".
 
 ### Changed
 
@@ -620,7 +850,7 @@ We believe the API is now pretty much stable, and are aiming for a 1.0 release s
 
 ### Fixed
 
-- Fix issue with concurrent connection acquiry. (Pull #700)
+- Fix issue with concurrent connection acquisition. (Pull #700)
 - Fix write error on closing HTTP/2 connections. (Pull #699)
 
 ## 0.10.0 (December 29th, 2019)
@@ -869,7 +1099,7 @@ importing modules within the package.
 
 ## 0.6.7 (July 8, 2019)
 
-- Check for connection aliveness on re-acquiry (Pull #111)
+- Check for connection aliveness on re-acquisition (Pull #111)
 
 ## 0.6.6 (July 3, 2019)
 

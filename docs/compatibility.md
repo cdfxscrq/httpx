@@ -143,25 +143,37 @@ Within a `stream()` block request data is made available with:
 * `.iter_text()` - Instead of `response.iter_content(decode_unicode=True)`
 * `.iter_lines()` - Corresponding to `response.iter_lines()`
 * `.iter_raw()` - Use this instead of `response.raw`
-* `.read()` - Read the entire response body, making `request.text` and `response.content` available.
+* `.read()` - Read the entire response body, making `response.text` and `response.content` available.
+
+## Timeouts
+
+HTTPX defaults to including reasonable [timeouts](quickstart.md#timeouts) for all network operations, while Requests has no timeouts by default.
+
+To get the same behavior as Requests, set the `timeout` parameter to `None`:
+
+```python
+httpx.get('https://www.example.com', timeout=None)
+```
 
 ## Proxy keys
 
-When using `httpx.Client(proxies={...})` to map to a selection of different proxies, we use full URL schemes, such as `proxies={"http://": ..., "https://": ...}`.
+HTTPX uses the mounts argument for HTTP proxying and transport routing.
+It can do much more than proxies and allows you to configure more than just the proxy route.
+For more detailed documentation, see [Mounting Transports](advanced/transports.md#mounting-transports).
+
+When using `httpx.Client(mounts={...})` to map to a selection of different transports, we use full URL schemes, such as `mounts={"http://": ..., "https://": ...}`.
 
 This is different to the `requests` usage of `proxies={"http": ..., "https": ...}`.
 
-This change is for better consistency with more complex mappings, that might also include domain names, such as `proxies={"all://": ..., "all://www.example.com": None}` which maps all requests onto a proxy, except for requests to "www.example.com" which have an explicit exclusion.
+This change is for better consistency with more complex mappings, that might also include domain names, such as `mounts={"all://": ..., httpx.HTTPTransport(proxy="all://www.example.com": None})` which maps all requests onto a proxy, except for requests to "www.example.com" which have an explicit exclusion.
 
-Also note that `requests.Session.request(...)` allows a `proxies=...` parameter, whereas `httpx.Client.request(...)` does not.
+Also note that `requests.Session.request(...)` allows a `proxies=...` parameter, whereas `httpx.Client.request(...)` does not allow `mounts=...`.
 
 ## SSL configuration
 
-When using a `Client` instance, the `trust_env`, `verify`, and `cert` arguments should always be passed on client instantiation, rather than passed to the request method.
+When using a `Client` instance, the ssl configurations should always be passed on client instantiation, rather than passed to the request method.
 
 If you need more than one different SSL configuration, you should use different client instances for each SSL configuration.
-
-Requests supports `REQUESTS_CA_BUNDLE` which points to either a file or a directory. HTTPX supports the `SSL_CERT_FILE` (for a file) and `SSL_CERT_DIR` (for a directory) OpenSSL variables instead.
 
 ## Request body on HTTP methods
 
@@ -183,13 +195,17 @@ We don't support `response.is_ok` since the naming is ambiguous there, and might
 
 ## Request instantiation
 
-There is no notion of [prepared requests](https://requests.readthedocs.io/en/stable/user/advanced/#prepared-requests) in HTTPX. If you need to customize request instantiation, see [Request instances](advanced.md#request-instances).
+There is no notion of [prepared requests](https://requests.readthedocs.io/en/stable/user/advanced/#prepared-requests) in HTTPX. If you need to customize request instantiation, see [Request instances](advanced/clients.md#request-instances).
 
-Besides, `httpx.Request()` does not support the `auth`, `timeout`, `follow_redirects`, `proxies`, `verify` and `cert` parameters. However these are available in `httpx.request`, `httpx.get`, `httpx.post` etc., as well as on [`Client` instances](advanced.md#client-instances).
+Besides, `httpx.Request()` does not support the `auth`, `timeout`, `follow_redirects`, `mounts`, `verify` and `cert` parameters. However these are available in `httpx.request`, `httpx.get`, `httpx.post` etc., as well as on [`Client` instances](advanced/clients.md#client-instances).
 
 ## Mocking
 
 If you need to mock HTTPX the same way that test utilities like `responses` and `requests-mock` does for `requests`, see [RESPX](https://github.com/lundberg/respx).
+
+## Caching
+
+If you use `cachecontrol` or `requests-cache` to add HTTP Caching support to the `requests` library, you can use [Hishel](https://hishel.com) for HTTPX.
 
 ## Networking layer
 
@@ -201,10 +217,12 @@ On the other hand, HTTPX uses [HTTPCore](https://github.com/encode/httpcore) as 
 
 `requests` omits `params` whose values are `None` (e.g. `requests.get(..., params={"foo": None})`). This is not supported by HTTPX.
 
+For both query params (`params=`) and form data (`data=`), `requests` supports sending a list of tuples (e.g. `requests.get(..., params=[('key1', 'value1'), ('key1', 'value2')])`). This is not supported by HTTPX. Instead, use a dictionary with lists as values. E.g.: `httpx.get(..., params={'key1': ['value1', 'value2']})` or with form data: `httpx.post(..., data={'key1': ['value1', 'value2']})`.
+
 ## Event Hooks
 
 `requests` allows event hooks to mutate `Request` and `Response` objects. See [examples](https://requests.readthedocs.io/en/master/user/advanced/#event-hooks) given in the documentation for `requests`.
 
 In HTTPX, event hooks may access properties of requests and responses, but event hook callbacks cannot mutate the original request/response.
 
-If you are looking for more control, consider checking out [Custom Transports](advanced.md#custom-transports).
+If you are looking for more control, consider checking out [Custom Transports](advanced/transports.md#custom-transports).

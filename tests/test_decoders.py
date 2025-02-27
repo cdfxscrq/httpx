@@ -1,19 +1,14 @@
+from __future__ import annotations
+
+import io
+import typing
 import zlib
 
+import chardet
 import pytest
+import zstandard as zstd
 
 import httpx
-from httpx._compat import brotli
-from httpx._decoders import (
-    BrotliDecoder,
-    ByteChunker,
-    DeflateDecoder,
-    GZipDecoder,
-    IdentityDecoder,
-    LineDecoder,
-    TextChunker,
-    TextDecoder,
-)
 
 
 def test_deflate():
@@ -69,7 +64,7 @@ def test_gzip():
 
 def test_brotli():
     body = b"test 123"
-    compressed_body = brotli.compress(body)
+    compressed_body = b"\x8b\x03\x80test 123\x03"
 
     headers = [(b"Content-Encoding", b"br")]
     response = httpx.Response(
@@ -78,6 +73,72 @@ def test_brotli():
         content=compressed_body,
     )
     assert response.content == body
+
+
+def test_zstd():
+    body = b"test 123"
+    compressed_body = zstd.compress(body)
+
+    headers = [(b"Content-Encoding", b"zstd")]
+    response = httpx.Response(
+        200,
+        headers=headers,
+        content=compressed_body,
+    )
+    assert response.content == body
+
+
+def test_zstd_decoding_error():
+    compressed_body = "this_is_not_zstd_compressed_data"
+
+    headers = [(b"Content-Encoding", b"zstd")]
+    with pytest.raises(httpx.DecodingError):
+        httpx.Response(
+            200,
+            headers=headers,
+            content=compressed_body,
+        )
+
+
+def test_zstd_empty():
+    headers = [(b"Content-Encoding", b"zstd")]
+    response = httpx.Response(200, headers=headers, content=b"")
+    assert response.content == b""
+
+
+def test_zstd_truncated():
+    body = b"test 123"
+    compressed_body = zstd.compress(body)
+
+    headers = [(b"Content-Encoding", b"zstd")]
+    with pytest.raises(httpx.DecodingError):
+        httpx.Response(
+            200,
+            headers=headers,
+            content=compressed_body[1:3],
+        )
+
+
+def test_zstd_multiframe():
+    # test inspired by urllib3 test suite
+    data = (
+        # Zstandard frame
+        zstd.compress(b"foo")
+        # skippable frame (must be ignored)
+        + bytes.fromhex(
+            "50 2A 4D 18"  # Magic_Number (little-endian)
+            "07 00 00 00"  # Frame_Size (little-endian)
+            "00 00 00 00 00 00 00"  # User_Data
+        )
+        # Zstandard frame
+        + zstd.compress(b"bar")
+    )
+    compressed_body = io.BytesIO(data)
+
+    headers = [(b"Content-Encoding", b"zstd")]
+    response = httpx.Response(200, headers=headers, content=compressed_body)
+    response.read()
+    assert response.content == b"foobar"
 
 
 def test_multi():
@@ -102,7 +163,7 @@ def test_multi():
 
 def test_multi_with_identity():
     body = b"test 123"
-    compressed_body = brotli.compress(body)
+    compressed_body = b"\x8b\x03\x80test 123\x03"
 
     headers = [(b"Content-Encoding", b"br, identity")]
     response = httpx.Response(
@@ -121,12 +182,12 @@ def test_multi_with_identity():
     assert response.content == body
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_streaming():
     body = b"test 123"
     compressor = zlib.compressobj(9, zlib.DEFLATED, zlib.MAX_WBITS | 16)
 
-    async def compress(body):
+    async def compress(body: bytes) -> typing.AsyncIterator[bytes]:
         yield compressor.compress(body)
         yield compressor.flush()
 
@@ -151,21 +212,17 @@ def test_empty_content(header_value):
     assert response.content == b""
 
 
-@pytest.mark.parametrize(
-    "decoder", (BrotliDecoder, DeflateDecoder, GZipDecoder, IdentityDecoder)
-)
-def test_decoders_empty_cases(decoder):
-    response = httpx.Response(content=b"", status_code=200)
-    instance = decoder()
-    assert instance.decode(response.content) == b""
-    assert instance.flush() == b""
+@pytest.mark.parametrize("header_value", (b"deflate", b"gzip", b"br", b"identity"))
+def test_decoders_empty_cases(header_value):
+    headers = [(b"Content-Encoding", header_value)]
+    response = httpx.Response(content=b"", status_code=200, headers=headers)
+    assert response.read() == b""
 
 
 @pytest.mark.parametrize("header_value", (b"deflate", b"gzip", b"br"))
 def test_decoding_errors(header_value):
     headers = [(b"Content-Encoding", header_value)]
-    body = b"test 123"
-    compressed_body = brotli.compress(body)[3:]
+    compressed_body = b"invalid"
     with pytest.raises(httpx.DecodingError):
         request = httpx.Request("GET", "https://example.org")
         httpx.Response(200, headers=headers, content=compressed_body, request=request)
@@ -183,18 +240,18 @@ def test_decoding_errors(header_value):
         ((b"Accented: \xd6sterreich abcdefghijklmnopqrstuvwxyz", b""), "iso-8859-1"),
     ],
 )
-@pytest.mark.asyncio
-async def test_text_decoder(data, encoding):
-    async def iterator():
+@pytest.mark.anyio
+async def test_text_decoder_with_autodetect(data, encoding):
+    async def iterator() -> typing.AsyncIterator[bytes]:
         nonlocal data
         for chunk in data:
             yield chunk
 
+    def autodetect(content):
+        return chardet.detect(content).get("encoding")
+
     # Accessing `.text` on a read response.
-    response = httpx.Response(
-        200,
-        content=iterator(),
-    )
+    response = httpx.Response(200, content=iterator(), default_encoding=autodetect)
     await response.aread()
     assert response.text == (b"".join(data)).decode(encoding)
 
@@ -206,9 +263,9 @@ async def test_text_decoder(data, encoding):
     assert text == (b"".join(data)).decode(encoding)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_text_decoder_known_encoding():
-    async def iterator():
+    async def iterator() -> typing.AsyncIterator[bytes]:
         yield b"\x83g"
         yield b"\x83"
         yield b"\x89\x83x\x83\x8b"
@@ -224,125 +281,66 @@ async def test_text_decoder_known_encoding():
 
 
 def test_text_decoder_empty_cases():
-    decoder = TextDecoder()
-    assert decoder.flush() == ""
+    response = httpx.Response(200, content=b"")
+    assert response.text == ""
 
-    decoder = TextDecoder()
-    assert decoder.decode(b"") == ""
-    assert decoder.flush() == ""
+    response = httpx.Response(200, content=[b""])
+    response.read()
+    assert response.text == ""
+
+
+@pytest.mark.parametrize(
+    ["data", "expected"],
+    [((b"Hello,", b" world!"), ["Hello,", " world!"])],
+)
+def test_streaming_text_decoder(
+    data: typing.Iterable[bytes], expected: list[str]
+) -> None:
+    response = httpx.Response(200, content=iter(data))
+    assert list(response.iter_text()) == expected
 
 
 def test_line_decoder_nl():
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\n\nb\nc") == ["a\n", "\n", "b\n"]
-    assert decoder.flush() == ["c"]
+    response = httpx.Response(200, content=[b""])
+    assert list(response.iter_lines()) == []
 
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\n\nb\nc\n") == ["a\n", "\n", "b\n", "c\n"]
-    assert decoder.flush() == []
+    response = httpx.Response(200, content=[b"", b"a\n\nb\nc"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
     # Issue #1033
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("12345\n") == ["12345\n"]
-    assert decoder.decode("foo ") == []
-    assert decoder.decode("bar ") == []
-    assert decoder.decode("baz\n") == ["foo bar baz\n"]
-    assert decoder.flush() == []
+    response = httpx.Response(
+        200, content=[b"", b"12345\n", b"foo ", b"bar ", b"baz\n"]
+    )
+    assert list(response.iter_lines()) == ["12345", "foo bar baz"]
 
 
 def test_line_decoder_cr():
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\r\rb\rc") == ["a\n", "\n", "b\n"]
-    assert decoder.flush() == ["c"]
+    response = httpx.Response(200, content=[b"", b"a\r\rb\rc"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\r\rb\rc\r") == ["a\n", "\n", "b\n"]
-    assert decoder.flush() == ["c\n"]
+    response = httpx.Response(200, content=[b"", b"a\r\rb\rc\r"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
     # Issue #1033
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("12345\r") == []
-    assert decoder.decode("foo ") == ["12345\n"]
-    assert decoder.decode("bar ") == []
-    assert decoder.decode("baz\r") == []
-    assert decoder.flush() == ["foo bar baz\n"]
+    response = httpx.Response(
+        200, content=[b"", b"12345\r", b"foo ", b"bar ", b"baz\r"]
+    )
+    assert list(response.iter_lines()) == ["12345", "foo bar baz"]
 
 
 def test_line_decoder_crnl():
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\r\n\r\nb\r\nc") == ["a\n", "\n", "b\n"]
-    assert decoder.flush() == ["c"]
+    response = httpx.Response(200, content=[b"", b"a\r\n\r\nb\r\nc"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\r\n\r\nb\r\nc\r\n") == ["a\n", "\n", "b\n", "c\n"]
-    assert decoder.flush() == []
+    response = httpx.Response(200, content=[b"", b"a\r\n\r\nb\r\nc\r\n"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("a\r") == []
-    assert decoder.decode("\n\r\nb\r\nc") == ["a\n", "\n", "b\n"]
-    assert decoder.flush() == ["c"]
+    response = httpx.Response(200, content=[b"", b"a\r", b"\n\r\nb\r\nc"])
+    assert list(response.iter_lines()) == ["a", "", "b", "c"]
 
     # Issue #1033
-    decoder = LineDecoder()
-    assert decoder.decode("") == []
-    assert decoder.decode("12345\r\n") == ["12345\n"]
-    assert decoder.decode("foo ") == []
-    assert decoder.decode("bar ") == []
-    assert decoder.decode("baz\r\n") == ["foo bar baz\n"]
-    assert decoder.flush() == []
-
-
-def test_byte_chunker():
-    decoder = ByteChunker()
-    assert decoder.decode(b"1234567") == [b"1234567"]
-    assert decoder.decode(b"89") == [b"89"]
-    assert decoder.flush() == []
-
-    decoder = ByteChunker(chunk_size=3)
-    assert decoder.decode(b"1234567") == [b"123", b"456"]
-    assert decoder.decode(b"89") == [b"789"]
-    assert decoder.flush() == []
-
-    decoder = ByteChunker(chunk_size=3)
-    assert decoder.decode(b"123456") == [b"123", b"456"]
-    assert decoder.decode(b"789") == [b"789"]
-    assert decoder.flush() == []
-
-    decoder = ByteChunker(chunk_size=3)
-    assert decoder.decode(b"123456") == [b"123", b"456"]
-    assert decoder.decode(b"78") == []
-    assert decoder.flush() == [b"78"]
-
-
-def test_text_chunker():
-    decoder = TextChunker()
-    assert decoder.decode("1234567") == ["1234567"]
-    assert decoder.decode("89") == ["89"]
-    assert decoder.flush() == []
-
-    decoder = TextChunker(chunk_size=3)
-    assert decoder.decode("1234567") == ["123", "456"]
-    assert decoder.decode("89") == ["789"]
-    assert decoder.flush() == []
-
-    decoder = TextChunker(chunk_size=3)
-    assert decoder.decode("123456") == ["123", "456"]
-    assert decoder.decode("789") == ["789"]
-    assert decoder.flush() == []
-
-    decoder = TextChunker(chunk_size=3)
-    assert decoder.decode("123456") == ["123", "456"]
-    assert decoder.decode("78") == []
-    assert decoder.flush() == ["78"]
+    response = httpx.Response(200, content=[b"", b"12345\r\n", b"foo bar baz\r\n"])
+    assert list(response.iter_lines()) == ["12345", "foo bar baz"]
 
 
 def test_invalid_content_encoding_header():

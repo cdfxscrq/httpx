@@ -23,10 +23,6 @@ HTTPX
 
 HTTPX is a fully featured HTTP client for Python 3, which provides sync and async APIs, and support for both HTTP/1.1 and HTTP/2.
 
-
-!!! note
-    The 0.21 release includes some improvements to the integrated command-line client. This latest version integrates against a re-designed version of `httpcore`. Both packages ought to automatically update to the required versions, but if you are seeing any issues then you should ensure that you have `httpx==0.21.*` and `httpcore==0.14.*` installed. See [the CHANGELOG](https://github.com/encode/httpx/blob/master/CHANGELOG.md) for more details.
-
 ---
 
 Install HTTPX using pip:
@@ -72,7 +68,7 @@ HTTPX builds on the well-established usability of `requests`, and gives you:
 * A broadly [requests-compatible API](compatibility.md).
 * Standard synchronous interface, but with [async support if you need it](async.md).
 * HTTP/1.1 [and HTTP/2 support](http2.md).
-* Ability to make requests directly to [WSGI applications](advanced.md#calling-into-python-web-apps) or [ASGI applications](async.md#calling-into-python-web-apps).
+* Ability to make requests directly to [WSGI applications](advanced/transports.md#wsgi-transport) or [ASGI applications](advanced/transports.md#asgi-transport).
 * Strict timeouts everywhere.
 * Fully type annotated.
 * 100% test coverage.
@@ -99,7 +95,7 @@ Plus all the standard features of `requests`...
 
 For a run-through of all the basics, head over to the [QuickStart](quickstart.md).
 
-For more advanced topics, see the [Advanced Usage](advanced.md) section,
+For more advanced topics, see the **Advanced** section,
 the [async support](async.md) section, or the [HTTP/2](http2.md) section.
 
 The [Developer Interface](api.md) provides a comprehensive API reference.
@@ -112,16 +108,18 @@ The HTTPX project relies on these excellent libraries:
 
 * `httpcore` - The underlying transport implementation for `httpx`.
   * `h11` - HTTP/1.1 support.
-  * `h2` - HTTP/2 support. *(Optional, with `httpx[http2]`)*
 * `certifi` - SSL certificates.
-* `charset_normalizer` - Charset auto-detection.
-* `rfc3986` - URL parsing & normalization.
-  * `idna` - Internationalized domain name support.
+* `idna` - Internationalized domain name support.
 * `sniffio` - Async library autodetection.
+
+As well as these optional installs:
+
+* `h2` - HTTP/2 support. *(Optional, with `httpx[http2]`)*
+* `socksio` - SOCKS proxy support. *(Optional, with `httpx[socks]`)*
 * `rich` - Rich terminal support. *(Optional, with `httpx[cli]`)*
 * `click` - Command line client support. *(Optional, with `httpx[cli]`)*
 * `brotli` or `brotlicffi` - Decoding for "brotli" compressed responses. *(Optional, with `httpx[brotli]`)*
-* `async_generator` - Backport support for `contextlib.asynccontextmanager`. *(Only required for Python 3.6)*
+* `zstandard` - Decoding for "zstd" compressed responses. *(Optional, with `httpx[zstd]`)*
 
 A huge amount of credit is due to `requests` for the API layout that
 much of this work follows, as well as to `urllib3` for plenty of design
@@ -141,12 +139,12 @@ Or, to include the optional HTTP/2 support, use:
 $ pip install httpx[http2]
 ```
 
-To include the optional brotli decoder support, use:
+To include the optional brotli and zstandard decoders support, use:
 
 ```shell
-$ pip install httpx[brotli]
+$ pip install httpx[brotli,zstd]
 ```
 
-HTTPX requires Python 3.6+
+HTTPX requires Python 3.8+
 
 [sync-support]: https://github.com/encode/httpx/issues/572

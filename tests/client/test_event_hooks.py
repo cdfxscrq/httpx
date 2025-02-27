@@ -36,7 +36,7 @@ def test_event_hooks():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },
@@ -63,7 +63,7 @@ def test_event_hooks_raising_exception(server):
             assert exc.response.is_closed
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_async_event_hooks():
     events = []
 
@@ -87,7 +87,7 @@ async def test_async_event_hooks():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },
@@ -99,7 +99,7 @@ async def test_async_event_hooks():
     ]
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_async_event_hooks_raising_exception():
     async def raise_on_4xx_5xx(response):
         response.raise_for_status()
@@ -144,7 +144,7 @@ def test_event_hooks_with_redirect():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },
@@ -159,7 +159,7 @@ def test_event_hooks_with_redirect():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },
@@ -171,7 +171,7 @@ def test_event_hooks_with_redirect():
     ]
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_async_event_hooks_with_redirect():
     """
     A redirect request should trigger additional 'request' and 'response' event hooks.
@@ -201,7 +201,7 @@ async def test_async_event_hooks_with_redirect():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },
@@ -216,7 +216,7 @@ async def test_async_event_hooks_with_redirect():
                 "host": "127.0.0.1:8000",
                 "user-agent": f"python-httpx/{httpx.__version__}",
                 "accept": "*/*",
-                "accept-encoding": "gzip, deflate, br",
+                "accept-encoding": "gzip, deflate, br, zstd",
                 "connection": "keep-alive",
                 "authorization": "Basic dXNlcm5hbWU6cGFzc3dvcmQ=",
             },

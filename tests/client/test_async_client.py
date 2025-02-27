@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing
 from datetime import timedelta
 
@@ -6,7 +8,7 @@ import pytest
 import httpx
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_get(server):
     url = server.url
     async with httpx.AsyncClient(http2=True) as client:
@@ -27,14 +29,14 @@ async def test_get(server):
         pytest.param("http://", id="no-host"),
     ],
 )
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_get_invalid_url(server, url):
     async with httpx.AsyncClient() as client:
         with pytest.raises((httpx.UnsupportedProtocol, httpx.LocalProtocolError)):
             await client.get(url)
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_build_request(server):
     url = server.url.copy_with(path="/echo_headers")
     headers = {"Custom-header": "value"}
@@ -49,7 +51,7 @@ async def test_build_request(server):
     assert response.json()["Custom-header"] == "value"
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_post(server):
     url = server.url
     async with httpx.AsyncClient() as client:
@@ -57,7 +59,7 @@ async def test_post(server):
     assert response.status_code == 200
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_post_json(server):
     url = server.url
     async with httpx.AsyncClient() as client:
@@ -65,7 +67,7 @@ async def test_post_json(server):
     assert response.status_code == 200
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_stream_response(server):
     async with httpx.AsyncClient() as client:
         async with client.stream("GET", server.url) as response:
@@ -76,7 +78,7 @@ async def test_stream_response(server):
     assert response.content == b"Hello, world!"
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_access_content_stream_response(server):
     async with httpx.AsyncClient() as client:
         async with client.stream("GET", server.url) as response:
@@ -84,12 +86,12 @@ async def test_access_content_stream_response(server):
 
     assert response.status_code == 200
     with pytest.raises(httpx.ResponseNotRead):
-        response.content
+        response.content  # noqa: B018
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_stream_request(server):
-    async def hello_world():
+    async def hello_world() -> typing.AsyncIterator[bytes]:
         yield b"Hello, "
         yield b"world!"
 
@@ -98,9 +100,9 @@ async def test_stream_request(server):
     assert response.status_code == 200
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_cannot_stream_sync_request(server):
-    def hello_world():  # pragma: nocover
+    def hello_world() -> typing.Iterator[bytes]:  # pragma: no cover
         yield b"Hello, "
         yield b"world!"
 
@@ -109,7 +111,7 @@ async def test_cannot_stream_sync_request(server):
             await client.post(server.url, content=hello_world())
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_raise_for_status(server):
     async with httpx.AsyncClient() as client:
         for status_code in (200, 400, 404, 500, 505):
@@ -122,10 +124,10 @@ async def test_raise_for_status(server):
                     response.raise_for_status()
                 assert exc_info.value.response == response
             else:
-                assert response.raise_for_status() is None  # type: ignore
+                assert response.raise_for_status() is response
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_options(server):
     async with httpx.AsyncClient() as client:
         response = await client.options(server.url)
@@ -133,7 +135,7 @@ async def test_options(server):
     assert response.text == "Hello, world!"
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_head(server):
     async with httpx.AsyncClient() as client:
         response = await client.head(server.url)
@@ -141,21 +143,21 @@ async def test_head(server):
     assert response.text == ""
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_put(server):
     async with httpx.AsyncClient() as client:
         response = await client.put(server.url, content=b"Hello, world!")
     assert response.status_code == 200
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_patch(server):
     async with httpx.AsyncClient() as client:
         response = await client.patch(server.url, content=b"Hello, world!")
     assert response.status_code == 200
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_delete(server):
     async with httpx.AsyncClient() as client:
         response = await client.delete(server.url)
@@ -163,7 +165,7 @@ async def test_delete(server):
     assert response.text == "Hello, world!"
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_100_continue(server):
     headers = {"Expect": "100-continue"}
     content = b"Echo request body"
@@ -177,11 +179,11 @@ async def test_100_continue(server):
     assert response.content == content
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_context_managed_transport():
     class Transport(httpx.AsyncBaseTransport):
-        def __init__(self):
-            self.events = []
+        def __init__(self) -> None:
+            self.events: list[str] = []
 
         async def aclose(self):
             # The base implementation of httpx.AsyncBaseTransport just
@@ -209,12 +211,12 @@ async def test_context_managed_transport():
     ]
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_context_managed_transport_and_mount():
     class Transport(httpx.AsyncBaseTransport):
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name: str = name
-            self.events: typing.List[str] = []
+            self.events: list[str] = []
 
         async def aclose(self):
             # The base implementation of httpx.AsyncBaseTransport just
@@ -254,7 +256,7 @@ def hello_world(request):
     return httpx.Response(200, text="Hello, world!")
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_client_closed_state_using_implicit_open():
     client = httpx.AsyncClient(transport=httpx.MockTransport(hello_world))
 
@@ -272,10 +274,10 @@ async def test_client_closed_state_using_implicit_open():
     # Once we're closed we cannot reopen the client.
     with pytest.raises(RuntimeError):
         async with client:
-            pass  # pragma: nocover
+            pass  # pragma: no cover
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_client_closed_state_using_with_block():
     async with httpx.AsyncClient(transport=httpx.MockTransport(hello_world)) as client:
         assert not client.is_closed
@@ -284,14 +286,6 @@ async def test_client_closed_state_using_with_block():
     assert client.is_closed
     with pytest.raises(RuntimeError):
         await client.get("http://example.com")
-
-
-@pytest.mark.usefixtures("async_environment")
-async def test_deleting_unclosed_async_client_causes_warning():
-    client = httpx.AsyncClient(transport=httpx.MockTransport(hello_world))
-    await client.get("http://example.com")
-    with pytest.warns(UserWarning):
-        del client
 
 
 def unmounted(request: httpx.Request) -> httpx.Response:
@@ -304,7 +298,7 @@ def mounted(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=data)
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_mounted_transport():
     transport = httpx.MockTransport(unmounted)
     mounts = {"custom://": httpx.MockTransport(mounted)}
@@ -319,9 +313,9 @@ async def test_mounted_transport():
         assert response.json() == {"app": "mounted"}
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
 async def test_async_mock_transport():
-    async def hello_world(request):
+    async def hello_world(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="Hello, world!")
 
     transport = httpx.MockTransport(hello_world)
@@ -332,7 +326,47 @@ async def test_async_mock_transport():
         assert response.text == "Hello, world!"
 
 
-@pytest.mark.usefixtures("async_environment")
+@pytest.mark.anyio
+async def test_cancellation_during_stream():
+    """
+    If any BaseException is raised during streaming the response, then the
+    stream should be closed.
+
+    This includes:
+
+    * `asyncio.CancelledError` (A subclass of BaseException from Python 3.8 onwards.)
+    * `trio.Cancelled`
+    * `KeyboardInterrupt`
+    * `SystemExit`
+
+    See https://github.com/encode/httpx/issues/2139
+    """
+    stream_was_closed = False
+
+    def response_with_cancel_during_stream(request):
+        class CancelledStream(httpx.AsyncByteStream):
+            async def __aiter__(self) -> typing.AsyncIterator[bytes]:
+                yield b"Hello"
+                raise KeyboardInterrupt()
+                yield b", world"  # pragma: no cover
+
+            async def aclose(self) -> None:
+                nonlocal stream_was_closed
+                stream_was_closed = True
+
+        return httpx.Response(
+            200, headers={"Content-Length": "12"}, stream=CancelledStream()
+        )
+
+    transport = httpx.MockTransport(response_with_cancel_during_stream)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(KeyboardInterrupt):
+            await client.get("https://www.example.com")
+        assert stream_was_closed
+
+
+@pytest.mark.anyio
 async def test_server_extensions(server):
     url = server.url
     async with httpx.AsyncClient(http2=True) as client:

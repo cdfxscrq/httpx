@@ -1,15 +1,16 @@
 import os
+import typing
 
 from click.testing import CliRunner
 
 import httpx
 
 
-def splitlines(output):
+def splitlines(output: str) -> typing.Iterable[str]:
     return [line.strip() for line in output.splitlines()]
 
 
-def remove_date_header(lines):
+def remove_date_header(lines: typing.Iterable[str]) -> typing.Iterable[str]:
     return [line for line in lines if not line.startswith("date:")]
 
 
@@ -49,6 +50,22 @@ def test_json(server):
         "{",
         '"Hello": "world!"',
         "}",
+    ]
+
+
+def test_binary(server):
+    url = str(server.url.copy_with(path="/echo_binary"))
+    runner = CliRunner()
+    content = "Hello, world!"
+    result = runner.invoke(httpx.main, [url, "-c", content])
+    assert result.exit_code == 0
+    assert remove_date_header(splitlines(result.output)) == [
+        "HTTP/1.1 200 OK",
+        "server: uvicorn",
+        "content-type: application/octet-stream",
+        "Transfer-Encoding: chunked",
+        "",
+        f"<{len(content)} bytes of binary data>",
     ]
 
 
@@ -97,7 +114,7 @@ def test_post(server):
         "content-type: text/plain",
         "Transfer-Encoding: chunked",
         "",
-        '{"hello": "world"}',
+        '{"hello":"world"}',
     ]
 
 
@@ -112,7 +129,7 @@ def test_verbose(server):
         "GET / HTTP/1.1",
         f"Host: {server.url.netloc.decode('ascii')}",
         "Accept: */*",
-        "Accept-Encoding: gzip, deflate, br",
+        "Accept-Encoding: gzip, deflate, br, zstd",
         "Connection: keep-alive",
         f"User-Agent: python-httpx/{httpx.__version__}",
         "",
@@ -137,7 +154,7 @@ def test_auth(server):
         "GET / HTTP/1.1",
         f"Host: {server.url.netloc.decode('ascii')}",
         "Accept: */*",
-        "Accept-Encoding: gzip, deflate, br",
+        "Accept-Encoding: gzip, deflate, br, zstd",
         "Connection: keep-alive",
         f"User-Agent: python-httpx/{httpx.__version__}",
         "Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=",

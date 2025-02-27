@@ -15,9 +15,9 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 from uvicorn.config import Config
-from uvicorn.main import Server
+from uvicorn.server import Server
 
-from httpx import URL
+import httpx
 from tests.concurrency import sleep
 
 ENVIRONMENT_VARIABLES = {
@@ -29,30 +29,6 @@ ENVIRONMENT_VARIABLES = {
     "NO_PROXY",
     "SSLKEYLOGFILE",
 }
-
-
-@pytest.fixture(
-    params=[
-        pytest.param("asyncio", marks=pytest.mark.asyncio),
-        pytest.param("trio", marks=pytest.mark.trio),
-    ]
-)
-def async_environment(request: typing.Any) -> str:
-    """
-    Mark a test function to be run on both asyncio and trio.
-
-    Equivalent to having a pair of tests, each respectively marked with
-    '@pytest.mark.asyncio' and '@pytest.mark.trio'.
-
-    Intended usage:
-
-    ```
-    @pytest.mark.usefixtures("async_environment")
-    async def my_async_test():
-        ...
-    ```
-    """
-    return request.param
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -72,7 +48,15 @@ def clean_environ():
     os.environ.update(original_environ)
 
 
-async def app(scope, receive, send):
+Message = typing.Dict[str, typing.Any]
+Receive = typing.Callable[[], typing.Awaitable[Message]]
+Send = typing.Callable[
+    [typing.Dict[str, typing.Any]], typing.Coroutine[None, None, None]
+]
+Scope = typing.Dict[str, typing.Any]
+
+
+async def app(scope: Scope, receive: Receive, send: Send) -> None:
     assert scope["type"] == "http"
     if scope["path"].startswith("/slow_response"):
         await slow_response(scope, receive, send)
@@ -80,6 +64,8 @@ async def app(scope, receive, send):
         await status_code(scope, receive, send)
     elif scope["path"].startswith("/echo_body"):
         await echo_body(scope, receive, send)
+    elif scope["path"].startswith("/echo_binary"):
+        await echo_binary(scope, receive, send)
     elif scope["path"].startswith("/echo_headers"):
         await echo_headers(scope, receive, send)
     elif scope["path"].startswith("/redirect_301"):
@@ -90,7 +76,7 @@ async def app(scope, receive, send):
         await hello_world(scope, receive, send)
 
 
-async def hello_world(scope, receive, send):
+async def hello_world(scope: Scope, receive: Receive, send: Send) -> None:
     await send(
         {
             "type": "http.response.start",
@@ -101,7 +87,7 @@ async def hello_world(scope, receive, send):
     await send({"type": "http.response.body", "body": b"Hello, world!"})
 
 
-async def hello_world_json(scope, receive, send):
+async def hello_world_json(scope: Scope, receive: Receive, send: Send) -> None:
     await send(
         {
             "type": "http.response.start",
@@ -112,8 +98,7 @@ async def hello_world_json(scope, receive, send):
     await send({"type": "http.response.body", "body": b'{"Hello": "world!"}'})
 
 
-async def slow_response(scope, receive, send):
-    await sleep(1.0)
+async def slow_response(scope: Scope, receive: Receive, send: Send) -> None:
     await send(
         {
             "type": "http.response.start",
@@ -121,10 +106,11 @@ async def slow_response(scope, receive, send):
             "headers": [[b"content-type", b"text/plain"]],
         }
     )
+    await sleep(1.0)  # Allow triggering a read timeout.
     await send({"type": "http.response.body", "body": b"Hello, world!"})
 
 
-async def status_code(scope, receive, send):
+async def status_code(scope: Scope, receive: Receive, send: Send) -> None:
     status_code = int(scope["path"].replace("/status/", ""))
     await send(
         {
@@ -136,7 +122,7 @@ async def status_code(scope, receive, send):
     await send({"type": "http.response.body", "body": b"Hello, world!"})
 
 
-async def echo_body(scope, receive, send):
+async def echo_body(scope: Scope, receive: Receive, send: Send) -> None:
     body = b""
     more_body = True
 
@@ -155,7 +141,26 @@ async def echo_body(scope, receive, send):
     await send({"type": "http.response.body", "body": body})
 
 
-async def echo_headers(scope, receive, send):
+async def echo_binary(scope: Scope, receive: Receive, send: Send) -> None:
+    body = b""
+    more_body = True
+
+    while more_body:
+        message = await receive()
+        body += message.get("body", b"")
+        more_body = message.get("more_body", False)
+
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [[b"content-type", b"application/octet-stream"]],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
+
+
+async def echo_headers(scope: Scope, receive: Receive, send: Send) -> None:
     body = {
         name.capitalize().decode(): value.decode()
         for name, value in scope.get("headers", [])
@@ -170,7 +175,7 @@ async def echo_headers(scope, receive, send):
     await send({"type": "http.response.body", "body": json.dumps(body).encode()})
 
 
-async def redirect_301(scope, receive, send):
+async def redirect_301(scope: Scope, receive: Receive, send: Send) -> None:
     await send(
         {"type": "http.response.start", "status": 301, "headers": [[b"location", b"/"]]}
     )
@@ -180,12 +185,6 @@ async def redirect_301(scope, receive, send):
 @pytest.fixture(scope="session")
 def cert_authority():
     return trustme.CA()
-
-
-@pytest.fixture(scope="session")
-def ca_cert_pem_file(cert_authority):
-    with cert_authority.cert_pem.tempfile() as tmp:
-        yield tmp
 
 
 @pytest.fixture(scope="session")
@@ -224,14 +223,14 @@ def cert_encrypted_private_key_file(localhost_cert):
 
 class TestServer(Server):
     @property
-    def url(self) -> URL:
+    def url(self) -> httpx.URL:
         protocol = "https" if self.config.is_ssl else "http"
-        return URL(f"{protocol}://{self.config.host}:{self.config.port}/")
+        return httpx.URL(f"{protocol}://{self.config.host}:{self.config.port}/")
 
     def install_signal_handlers(self) -> None:
         # Disable the default installation of handlers for signals such as SIGTERM,
         # because it can only be done in the main thread.
-        pass
+        pass  # pragma: nocover
 
     async def serve(self, sockets=None):
         self.restart_requested = asyncio.Event()
@@ -243,7 +242,7 @@ class TestServer(Server):
         }
         await asyncio.wait(tasks)
 
-    async def restart(self) -> None:  # pragma: nocover
+    async def restart(self) -> None:  # pragma: no cover
         # This coroutine may be called from a different thread than the one the
         # server is running on, and from an async environment that's not asyncio.
         # For this reason, we use an event to coordinate with the server
@@ -254,7 +253,7 @@ class TestServer(Server):
         while not self.started:
             await sleep(0.2)
 
-    async def watch_restarts(self):  # pragma: nocover
+    async def watch_restarts(self) -> None:  # pragma: no cover
         while True:
             if self.should_exit:
                 return
@@ -269,7 +268,7 @@ class TestServer(Server):
             await self.startup()
 
 
-def serve_in_thread(server: Server):
+def serve_in_thread(server: TestServer) -> typing.Iterator[TestServer]:
     thread = threading.Thread(target=server.run)
     thread.start()
     try:
@@ -282,21 +281,7 @@ def serve_in_thread(server: Server):
 
 
 @pytest.fixture(scope="session")
-def server():
+def server() -> typing.Iterator[TestServer]:
     config = Config(app=app, lifespan="off", loop="asyncio")
-    server = TestServer(config=config)
-    yield from serve_in_thread(server)
-
-
-@pytest.fixture(scope="session")
-def https_server(cert_pem_file, cert_private_key_file):
-    config = Config(
-        app=app,
-        lifespan="off",
-        ssl_certfile=cert_pem_file,
-        ssl_keyfile=cert_private_key_file,
-        port=8001,
-        loop="asyncio",
-    )
     server = TestServer(config=config)
     yield from serve_in_thread(server)

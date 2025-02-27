@@ -4,7 +4,23 @@ As HTTPX usage grows, there is an expanding community of developers building too
 
 ## Plugins
 
-<!-- NOTE: this list is in alphabetical order. -->
+### httpx-ws
+
+[GitHub](https://github.com/frankie567/httpx-ws) - [Documentation](https://frankie567.github.io/httpx-ws/)
+
+WebSocket support for HTTPX.
+
+### httpx-socks
+
+[GitHub](https://github.com/romis2012/httpx-socks)
+
+Proxy (HTTP, SOCKS) transports for httpx.
+
+### Hishel
+
+[GitHub](https://github.com/karpetrosyan/hishel) - [Documentation](https://hishel.com/)
+
+An elegant HTTP Cache implementation for HTTPX and HTTP Core.
 
 ### Authlib
 
@@ -22,7 +38,7 @@ An asynchronous GitHub API library. Includes [HTTPX support](https://gidgethub.r
 
 [GitHub](https://github.com/Colin-b/httpx_auth) - [Documentation](https://colin-b.github.io/httpx_auth/)
 
-Provides authentication classes to be used with HTTPX [authentication parameter](advanced.md#customizing-authentication).
+Provides authentication classes to be used with HTTPX [authentication parameter](advanced/authentication.md#customizing-authentication).
 
 ### pytest-HTTPX
 
@@ -54,6 +70,18 @@ A utility for record and repeat an http request.
 
 This package adds caching functionality to HTTPX
 
+### httpx-sse
+
+[GitHub](https://github.com/florimondmanca/httpx-sse)
+
+Allows consuming Server-Sent Events (SSE) with HTTPX.
+
+### robox
+
+[Github](https://github.com/danclaudiupop/robox)
+
+A library for scraping the web built on top of HTTPX.
+
 ## Gists
 
 <!-- NOTE: this list is in alphabetical order. -->
@@ -62,4 +90,4 @@ This package adds caching functionality to HTTPX
 
 [GitHub](https://gist.github.com/florimondmanca/d56764d78d748eb9f73165da388e546e)
 
-This public gist provides an example implementation for a [custom transport](advanced.md#custom-transports) implementation on top of the battle-tested [`urllib3`](https://urllib3.readthedocs.io) library.
+This public gist provides an example implementation for a [custom transport](advanced/transports.md#custom-transports) implementation on top of the battle-tested [`urllib3`](https://urllib3.readthedocs.io) library.

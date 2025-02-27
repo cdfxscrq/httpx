@@ -100,7 +100,8 @@ b'<!doctype html>\n<html>\n<head>\n<title>Example Domain</title>...'
 
 Any `gzip` and `deflate` HTTP response encodings will automatically
 be decoded for you. If `brotlipy` is installed, then the `brotli` response
-encoding will also be supported.
+encoding will be supported. If `zstandard` is installed, then `zstd`
+response encodings will also be supported.
 
 For example, to create an image from binary data returned by a request, you can use the following code:
 
@@ -173,8 +174,9 @@ Form encoded data can also include multiple values from a given key.
 You can also upload files, using HTTP multipart encoding:
 
 ```pycon
->>> files = {'upload-file': open('report.xls', 'rb')}
->>> r = httpx.post("https://httpbin.org/post", files=files)
+>>> with open('report.xls', 'rb') as report_file:
+...     files = {'upload-file': report_file}
+...     r = httpx.post("https://httpbin.org/post", files=files)
 >>> print(r.text)
 {
   ...
@@ -189,8 +191,9 @@ You can also explicitly set the filename and content type, by using a tuple
 of items for the file value:
 
 ```pycon
->>> files = {'upload-file': ('report.xls', open('report.xls', 'rb'), 'application/vnd.ms-excel')}
->>> r = httpx.post("https://httpbin.org/post", files=files)
+>>> with open('report.xls', 'rb') report_file:
+...     files = {'upload-file': ('report.xls', report_file, 'application/vnd.ms-excel')}
+...     r = httpx.post("https://httpbin.org/post", files=files)
 >>> print(r.text)
 {
   ...
@@ -205,8 +208,9 @@ If you need to include non-file data fields in the multipart form, use the `data
 
 ```pycon
 >>> data = {'message': 'Hello, world!'}
->>> files = {'file': open('report.xls', 'rb')}
->>> r = httpx.post("https://httpbin.org/post", data=data, files=files)
+>>> with open('report.xls', 'rb') as report_file:
+...     files = {'file': report_file}
+...     r = httpx.post("https://httpbin.org/post", data=data, files=files)
 >>> print(r.text)
 {
   ...
@@ -285,13 +289,20 @@ Traceback (most recent call last):
   File "/Users/tomchristie/GitHub/encode/httpcore/httpx/models.py", line 837, in raise_for_status
     raise HTTPStatusError(message, response=self)
 httpx._exceptions.HTTPStatusError: 404 Client Error: Not Found for url: https://httpbin.org/status/404
-For more information check: https://httpstatuses.com/404
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404
 ```
 
-Any successful response codes will simply return `None` rather than raising an exception.
+Any successful response codes will return the `Response` instance rather than raising an exception.
 
 ```pycon
 >>> r.raise_for_status()
+```
+
+The method returns the response instance, allowing you to use it inline. For example:
+
+```pycon
+>>> r = httpx.get('...').raise_for_status()
+>>> data = httpx.get('...').raise_for_status().json()
 ```
 
 ## Response Headers
@@ -355,7 +366,8 @@ Or stream the text, on a line-by-line basis...
 
 HTTPX will use universal line endings, normalising all cases to `\n`.
 
-In some cases you might want to access the raw bytes on the response without applying any HTTP content decoding. In this case any content encoding that the web server has applied such as `gzip`, `deflate`, or `brotli` will not be automatically decoded.
+In some cases you might want to access the raw bytes on the response without applying any HTTP content decoding. In this case any content encoding that the web server has applied such as `gzip`, `deflate`, `brotli`, or `zstd` will
+not be automatically decoded.
 
 ```pycon
 >>> with httpx.stream("GET", "https://www.example.com") as r:
@@ -367,7 +379,7 @@ If you're using streaming responses in any of these ways then the `response.cont
 
 ```pycon
 >>> with httpx.stream("GET", "https://www.example.com") as r:
-...     if r.headers['Content-Length'] < TOO_LONG:
+...     if int(r.headers['Content-Length']) < TOO_LONG:
 ...         r.read()
 ...         print(r.text)
 ```
@@ -455,7 +467,7 @@ You can also disable the timeout behavior completely...
 >>> httpx.get('https://github.com/', timeout=None)
 ```
 
-For advanced timeout management, see [Timeout fine-tuning](advanced.md#fine-tuning-the-configuration).
+For advanced timeout management, see [Timeout fine-tuning](advanced/timeouts.md#fine-tuning-the-configuration).
 
 ## Authentication
 
@@ -479,3 +491,57 @@ as above:
 >>> httpx.get("https://example.com", auth=auth)
 <Response [200 OK]>
 ```
+
+## Exceptions
+
+HTTPX will raise exceptions if an error occurs.
+
+The most important exception classes in HTTPX are `RequestError` and `HTTPStatusError`.
+
+The `RequestError` class is a superclass that encompasses any exception that occurs
+while issuing an HTTP request. These exceptions include a `.request` attribute.
+
+```python
+try:
+    response = httpx.get("https://www.example.com/")
+except httpx.RequestError as exc:
+    print(f"An error occurred while requesting {exc.request.url!r}.")
+```
+
+The `HTTPStatusError` class is raised by `response.raise_for_status()` on responses which are not a 2xx success code.
+These exceptions include both a `.request` and a `.response` attribute.
+
+```python
+response = httpx.get("https://www.example.com/")
+try:
+    response.raise_for_status()
+except httpx.HTTPStatusError as exc:
+    print(f"Error response {exc.response.status_code} while requesting {exc.request.url!r}.")
+```
+
+There is also a base class `HTTPError` that includes both of these categories, and can be used
+to catch either failed requests, or 4xx and 5xx responses.
+
+You can either use this base class to catch both categories...
+
+```python
+try:
+    response = httpx.get("https://www.example.com/")
+    response.raise_for_status()
+except httpx.HTTPError as exc:
+    print(f"Error while requesting {exc.request.url!r}.")
+```
+
+Or handle each case explicitly...
+
+```python
+try:
+    response = httpx.get("https://www.example.com/")
+    response.raise_for_status()
+except httpx.RequestError as exc:
+    print(f"An error occurred while requesting {exc.request.url!r}.")
+except httpx.HTTPStatusError as exc:
+    print(f"Error response {exc.response.status_code} while requesting {exc.request.url!r}.")
+```
+
+For a full list of available exceptions, see [Exceptions (API Reference)](exceptions.md).
