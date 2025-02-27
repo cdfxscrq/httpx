@@ -1,20 +1,26 @@
+from __future__ import annotations
+
 import functools
 import json
 import sys
 import typing
 
 import click
-import httpcore
 import pygments.lexers
 import pygments.util
 import rich.console
+import rich.markup
 import rich.progress
 import rich.syntax
+import rich.table
 
 from ._client import Client
 from ._exceptions import RequestError
 from ._models import Response
 from ._status_codes import codes
+
+if typing.TYPE_CHECKING:
+    import httpcore  # pragma: no cover
 
 
 def print_help() -> None:
@@ -61,9 +67,10 @@ def print_help() -> None:
     )
     table.add_row(
         "--auth [cyan]<USER PASS>",
-        "Username and password to include in the request. Specify '-' for the password to use "
-        "a password prompt. Note that using --verbose/-v will expose the Authorization "
-        "header, including the password encoding in a trivially reversible format.",
+        "Username and password to include in the request. Specify '-' for the password"
+        " to use a password prompt. Note that using --verbose/-v will expose"
+        " the Authorization header, including the password encoding"
+        " in a trivially reversible format.",
     )
 
     table.add_row(
@@ -73,8 +80,8 @@ def print_help() -> None:
 
     table.add_row(
         "--timeout [cyan]FLOAT",
-        "Timeout value to use for network operations, such as establishing the connection, "
-        "reading some data, etc... [Default: 5.0]",
+        "Timeout value to use for network operations, such as establishing the"
+        " connection, reading some data, etc... [Default: 5.0]",
     )
 
     table.add_row("--follow-redirects", "Automatically follow redirects.")
@@ -98,10 +105,12 @@ def get_lexer_for_response(response: Response) -> str:
     if content_type is not None:
         mime_type, _, _ = content_type.partition(";")
         try:
-            return pygments.lexers.get_lexer_for_mimetype(mime_type.strip()).name
-        except pygments.util.ClassNotFound:  # pragma: nocover
+            return typing.cast(
+                str, pygments.lexers.get_lexer_for_mimetype(mime_type.strip()).name
+            )
+        except pygments.util.ClassNotFound:  # pragma: no cover
             pass
-    return ""  # pragma: nocover
+    return ""  # pragma: no cover
 
 
 def format_request_headers(request: httpcore.Request, http2: bool = False) -> str:
@@ -120,8 +129,8 @@ def format_request_headers(request: httpcore.Request, http2: bool = False) -> st
 def format_response_headers(
     http_version: bytes,
     status: int,
-    reason_phrase: typing.Optional[bytes],
-    headers: typing.List[typing.Tuple[bytes, bytes]],
+    reason_phrase: bytes | None,
+    headers: list[tuple[bytes, bytes]],
 ) -> str:
     version = http_version.decode("ascii")
     reason = (
@@ -147,8 +156,8 @@ def print_request_headers(request: httpcore.Request, http2: bool = False) -> Non
 def print_response_headers(
     http_version: bytes,
     status: int,
-    reason_phrase: typing.Optional[bytes],
-    headers: typing.List[typing.Tuple[bytes, bytes]],
+    reason_phrase: bytes | None,
+    headers: list[tuple[bytes, bytes]],
 ) -> None:
     console = rich.console.Console()
     http_text = format_response_headers(http_version, status, reason_phrase, headers)
@@ -166,17 +175,23 @@ def print_response(response: Response) -> None:
             try:
                 data = response.json()
                 text = json.dumps(data, indent=4)
-            except ValueError:  # pragma: nocover
+            except ValueError:  # pragma: no cover
                 text = response.text
         else:
             text = response.text
+
         syntax = rich.syntax.Syntax(text, lexer_name, theme="ansi_dark", word_wrap=True)
         console.print(syntax)
-    else:  # pragma: nocover
-        console.print(response.text)
+    else:
+        console.print(f"<{len(response.content)} bytes of binary data>")
 
 
-def format_certificate(cert: dict) -> str:  # pragma: nocover
+_PCTRTT = typing.Tuple[typing.Tuple[str, str], ...]
+_PCTRTTT = typing.Tuple[_PCTRTT, ...]
+_PeerCertRetDictType = typing.Dict[str, typing.Union[str, _PCTRTTT, _PCTRTT]]
+
+
+def format_certificate(cert: _PeerCertRetDictType) -> str:  # pragma: no cover
     lines = []
     for key, value in cert.items():
         if isinstance(value, (list, tuple)):
@@ -194,7 +209,9 @@ def format_certificate(cert: dict) -> str:  # pragma: nocover
     return "\n".join(lines)
 
 
-def trace(name: str, info: dict, verbose: bool = False) -> None:
+def trace(
+    name: str, info: typing.Mapping[str, typing.Any], verbose: bool = False
+) -> None:
     console = rich.console.Console()
     if name == "connection.connect_tcp.started" and verbose:
         host = info["host"]
@@ -203,7 +220,7 @@ def trace(name: str, info: dict, verbose: bool = False) -> None:
         stream = info["return_value"]
         server_addr = stream.get_extra_info("server_addr")
         console.print(f"* Connected to {server_addr[0]!r} on port {server_addr[1]}")
-    elif name == "connection.start_tls.complete" and verbose:  # pragma: nocover
+    elif name == "connection.start_tls.complete" and verbose:  # pragma: no cover
         stream = info["return_value"]
         ssl_object = stream.get_extra_info("ssl_object")
         version = ssl_object.version()
@@ -218,13 +235,13 @@ def trace(name: str, info: dict, verbose: bool = False) -> None:
     elif name == "http11.send_request_headers.started" and verbose:
         request = info["request"]
         print_request_headers(request, http2=False)
-    elif name == "http2.send_request_headers.started" and verbose:  # pragma: nocover
+    elif name == "http2.send_request_headers.started" and verbose:  # pragma: no cover
         request = info["request"]
         print_request_headers(request, http2=True)
     elif name == "http11.receive_response_headers.complete":
         http_version, status, reason_phrase, headers = info["return_value"]
         print_response_headers(http_version, status, reason_phrase, headers)
-    elif name == "http2.receive_response_headers.complete":  # pragma: nocover
+    elif name == "http2.receive_response_headers.complete":  # pragma: no cover
         status, headers = info["return_value"]
         http_version = b"HTTP/2"
         reason_phrase = None
@@ -233,11 +250,8 @@ def trace(name: str, info: dict, verbose: bool = False) -> None:
 
 def download_response(response: Response, download: typing.BinaryIO) -> None:
     console = rich.console.Console()
-    syntax = rich.syntax.Syntax("", "http", theme="ansi_dark", word_wrap=True)
-    console.print(syntax)
-
+    console.print()
     content_length = response.headers.get("Content-Length")
-    kwargs = {"total": int(content_length)} if content_length else {}
     with rich.progress.Progress(
         "[progress.description]{task.description}",
         "[progress.percentage]{task.percentage:>3.0f}%",
@@ -245,8 +259,12 @@ def download_response(response: Response, download: typing.BinaryIO) -> None:
         rich.progress.DownloadColumn(),
         rich.progress.TransferSpeedColumn(),
     ) as progress:
-        description = f"Downloading [bold]{download.name}"
-        download_task = progress.add_task(description, **kwargs)  # type: ignore
+        description = f"Downloading [bold]{rich.markup.escape(download.name)}"
+        download_task = progress.add_task(
+            description,
+            total=int(content_length or 0),
+            start=content_length is not None,
+        )
         for chunk in response.iter_bytes():
             download.write(chunk)
             progress.update(download_task, completed=response.num_bytes_downloaded)
@@ -254,7 +272,7 @@ def download_response(response: Response, download: typing.BinaryIO) -> None:
 
 def validate_json(
     ctx: click.Context,
-    param: typing.Union[click.Option, click.Parameter],
+    param: click.Option | click.Parameter,
     value: typing.Any,
 ) -> typing.Any:
     if value is None:
@@ -262,27 +280,27 @@ def validate_json(
 
     try:
         return json.loads(value)
-    except json.JSONDecodeError:  # pragma: nocover
+    except json.JSONDecodeError:  # pragma: no cover
         raise click.BadParameter("Not valid JSON")
 
 
 def validate_auth(
     ctx: click.Context,
-    param: typing.Union[click.Option, click.Parameter],
+    param: click.Option | click.Parameter,
     value: typing.Any,
 ) -> typing.Any:
     if value == (None, None):
         return None
 
     username, password = value
-    if password == "-":  # pragma: nocover
+    if password == "-":  # pragma: no cover
         password = click.prompt("Password", hide_input=True)
     return (username, password)
 
 
 def handle_help(
     ctx: click.Context,
-    param: typing.Union[click.Option, click.Parameter],
+    param: click.Option | click.Parameter,
     value: typing.Any,
 ) -> None:
     if not value or ctx.resilient_parsing:
@@ -372,8 +390,8 @@ def handle_help(
     ),
 )
 @click.option(
-    "--proxies",
-    "proxies",
+    "--proxy",
+    "proxy",
     type=str,
     default=None,
     help="Send the request via a proxy. Should be the URL giving the proxy address.",
@@ -434,20 +452,20 @@ def handle_help(
 def main(
     url: str,
     method: str,
-    params: typing.List[typing.Tuple[str, str]],
+    params: list[tuple[str, str]],
     content: str,
-    data: typing.List[typing.Tuple[str, str]],
-    files: typing.List[typing.Tuple[str, click.File]],
+    data: list[tuple[str, str]],
+    files: list[tuple[str, click.File]],
     json: str,
-    headers: typing.List[typing.Tuple[str, str]],
-    cookies: typing.List[typing.Tuple[str, str]],
-    auth: typing.Optional[typing.Tuple[str, str]],
-    proxies: str,
+    headers: list[tuple[str, str]],
+    cookies: list[tuple[str, str]],
+    auth: tuple[str, str] | None,
+    proxy: str,
     timeout: float,
     follow_redirects: bool,
     verify: bool,
     http2: bool,
-    download: typing.Optional[typing.BinaryIO],
+    download: typing.BinaryIO | None,
     verbose: bool,
 ) -> None:
     """
@@ -458,12 +476,7 @@ def main(
         method = "POST" if content or data or files or json else "GET"
 
     try:
-        with Client(
-            proxies=proxies,
-            timeout=timeout,
-            verify=verify,
-            http2=http2,
-        ) as client:
+        with Client(proxy=proxy, timeout=timeout, http2=http2, verify=verify) as client:
             with client.stream(
                 method,
                 url,

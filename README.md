@@ -13,11 +13,7 @@
 </a>
 </p>
 
-HTTPX is a fully featured HTTP client library for Python 3. It includes **an integrated
-command line client**, has support for both **HTTP/1.1 and HTTP/2**, and provides both **sync
-and async APIs**.
-
-**Note**: *The 0.21 release includes some improvements to the integrated command-line client. This latest version integrates against a re-designed version of `httpcore`. Both packages ought to automatically update to the required versions, but if you are seeing any issues then you should ensure that you have `httpx==0.21.*` and `httpcore==0.14.*` installed. See [the CHANGELOG](https://github.com/encode/httpx/blob/master/CHANGELOG.md) for more details.*
+HTTPX is a fully featured HTTP client library for Python 3. It includes **an integrated command line client**, has support for both **HTTP/1.1 and HTTP/2**, and provides both **sync and async APIs**.
 
 ---
 
@@ -68,7 +64,7 @@ HTTPX builds on the well-established usability of `requests`, and gives you:
 * An integrated command-line client.
 * HTTP/1.1 [and HTTP/2 support](https://www.python-httpx.org/http2/).
 * Standard synchronous interface, but with [async support if you need it](https://www.python-httpx.org/async/).
-* Ability to make requests directly to [WSGI applications](https://www.python-httpx.org/advanced/#calling-into-python-web-apps) or [ASGI applications](https://www.python-httpx.org/async/#calling-into-python-web-apps).
+* Ability to make requests directly to [WSGI applications](https://www.python-httpx.org/advanced/transports/#wsgi-transport) or [ASGI applications](https://www.python-httpx.org/advanced/transports/#asgi-transport).
 * Strict timeouts everywhere.
 * Fully type annotated.
 * 100% test coverage.
@@ -105,7 +101,7 @@ Or, to include the optional HTTP/2 support, use:
 $ pip install httpx[http2]
 ```
 
-HTTPX requires Python 3.6+.
+HTTPX requires Python 3.8+.
 
 ## Documentation
 
@@ -129,20 +125,23 @@ The HTTPX project relies on these excellent libraries:
 
 * `httpcore` - The underlying transport implementation for `httpx`.
   * `h11` - HTTP/1.1 support.
-  * `h2` - HTTP/2 support. *(Optional, with `httpx[http2]`)*
 * `certifi` - SSL certificates.
-* `charset_normalizer` - Charset auto-detection.
-* `rfc3986` - URL parsing & normalization.
-  * `idna` - Internationalized domain name support.
+* `idna` - Internationalized domain name support.
 * `sniffio` - Async library autodetection.
+
+As well as these optional installs:
+
+* `h2` - HTTP/2 support. *(Optional, with `httpx[http2]`)*
+* `socksio` - SOCKS proxy support. *(Optional, with `httpx[socks]`)*
 * `rich` - Rich terminal support. *(Optional, with `httpx[cli]`)*
 * `click` - Command line client support. *(Optional, with `httpx[cli]`)*
 * `brotli` or `brotlicffi` - Decoding for "brotli" compressed responses. *(Optional, with `httpx[brotli]`)*
-* `async_generator` - Backport support for `contextlib.asynccontextmanager`. *(Only required for Python 3.6)*
+* `zstandard` - Decoding for "zstd" compressed responses. *(Optional, with `httpx[zstd]`)*
 
 A huge amount of credit is due to `requests` for the API layout that
 much of this work follows, as well as to `urllib3` for plenty of design
 inspiration around the lower-level networking details.
 
-<p align="center">&mdash; ⭐️ &mdash;</p>
-<p align="center"><i>HTTPX is <a href="https://github.com/encode/httpx/blob/master/LICENSE.md">BSD licensed</a> code. Designed & built in Brighton, England.</i></p>
+---
+
+<p align="center"><i>HTTPX is <a href="https://github.com/encode/httpx/blob/master/LICENSE.md">BSD licensed</a> code.<br/>Designed & crafted with care.</i><br/>&mdash; 🦋 &mdash;</p>

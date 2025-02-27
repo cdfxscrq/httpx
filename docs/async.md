@@ -53,6 +53,9 @@ async with httpx.AsyncClient() as client:
     ...
 ```
 
+!!! warning
+    In order to get the most benefit from connection pooling, make sure you're not instantiating multiple client instances - for example by using `async with` inside a "hot loop". This can be achieved either by having a single scoped client that's passed throughout wherever it's needed, or by having a single global client instance.
+
 Alternatively, use `await client.aclose()` if you want to close a client explicitly:
 
 ```python
@@ -81,7 +84,7 @@ The async response streaming methods are:
 * `Response.aiter_raw()` - For streaming the raw response bytes, without applying content decoding.
 * `Response.aclose()` - For closing the response. You don't usually need this, since `.stream` block closes the response automatically on exit.
 
-For situations when context block usage is not practical, it is possible to enter "manual mode" by sending a [`Request` instance](./advanced.md#request-instances) using `client.send(..., stream=True)`.
+For situations when context block usage is not practical, it is possible to enter "manual mode" by sending a [`Request` instance](advanced/clients.md#request-instances) using `client.send(..., stream=True)`.
 
 Example in the context of forwarding the response to a streaming web endpoint with [Starlette](https://www.starlette.io):
 
@@ -109,7 +112,7 @@ When sending a streaming request body with an `AsyncClient` instance, you should
 async def upload_bytes():
     ...  # yield byte content
 
-await client.post(url, data=upload_bytes())
+await client.post(url, content=upload_bytes())
 ```
 
 ### Explicit transport instances
@@ -170,27 +173,6 @@ trio.run(main)
     The `trio` package must be installed to use the Trio backend.
 
 
-### [Curio](https://github.com/dabeaz/curio)
-
-Curio is a [coroutine-based library](https://curio.readthedocs.io/en/latest/tutorial.html)
-for concurrent Python systems programming.
-
-```python
-import httpx
-import curio
-
-async def main():
-    async with httpx.AsyncClient() as client:
-        response = await client.get('https://www.example.com/')
-        print(response)
-
-curio.run(main)
-```
-
-!!! important
-    The `curio` package must be installed to use the Curio backend.
-
-
 ### [AnyIO](https://github.com/agronholm/anyio)
 
 AnyIO is an [asynchronous networking and concurrency library](https://anyio.readthedocs.io/) that works on top of either `asyncio` or `trio`. It blends in with native libraries of your chosen backend (defaults to `asyncio`).
@@ -207,62 +189,6 @@ async def main():
 anyio.run(main, backend='trio')
 ```
 
-When instantiating a transport instance explicitly, for maximum consistency, the same `backend` parameter can be passed to `AsyncHTTPTransport`.
-```python
-transport = httpx.AsyncHTTPTransport(backend="trio")
-```
-
-
 ## Calling into Python Web Apps
 
-Just as `httpx.Client` allows you to call directly into WSGI web applications,
-the `httpx.AsyncClient` class allows you to call directly into ASGI web applications.
-
-Let's take this Starlette application as an example:
-
-```python
-from starlette.applications import Starlette
-from starlette.responses import HTMLResponse
-from starlette.routing import Route
-
-
-async def hello(request):
-    return HTMLResponse("Hello World!")
-
-
-app = Starlette(routes=[Route("/", hello)])
-```
-
-We can make requests directly against the application, like so:
-
-```pycon
->>> import httpx
->>> async with httpx.AsyncClient(app=app, base_url="http://testserver") as client:
-...     r = await client.get("/")
-...     assert r.status_code == 200
-...     assert r.text == "Hello World!"
-```
-
-For some more complex cases you might need to customise the ASGI transport. This allows you to:
-
-* Inspect 500 error responses rather than raise exceptions by setting `raise_app_exceptions=False`.
-* Mount the ASGI application at a subpath by setting `root_path`.
-* Use a given client address for requests by setting `client`.
-
-For example:
-
-```python
-# Instantiate a client that makes ASGI requests with a client IP of "1.2.3.4",
-# on port 123.
-transport = httpx.ASGITransport(app=app, client=("1.2.3.4", 123))
-async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-    ...
-```
-
-See [the ASGI documentation](https://asgi.readthedocs.io/en/latest/specs/www.html#connection-scope) for more details on the `client` and `root_path` keys.
-
-## Startup/shutdown of ASGI apps
-
-It is not in the scope of HTTPX to trigger lifespan events of your app.
-
-However it is suggested to use `LifespanManager` from [asgi-lifespan](https://github.com/florimondmanca/asgi-lifespan#usage) in pair with `AsyncClient`.
+For details on calling directly into ASGI applications, see [the `ASGITransport` docs](../advanced/transports#asgitransport).

@@ -1,9 +1,16 @@
+from __future__ import annotations
+
 import typing
 from datetime import timedelta
 
+import chardet
 import pytest
 
 import httpx
+
+
+def autodetect(content):
+    return chardet.detect(content).get("encoding")
 
 
 def test_get(server):
@@ -15,7 +22,7 @@ def test_get(server):
     assert response.content == b"Hello, world!"
     assert response.text == "Hello, world!"
     assert response.http_version == "HTTP/1.1"
-    assert response.encoding is None
+    assert response.encoding == "utf-8"
     assert response.request.url == url
     assert response.headers
     assert response.is_redirect is False
@@ -115,7 +122,7 @@ def test_raw_iterator(server):
 
 
 def test_cannot_stream_async_request(server):
-    async def hello_world():  # pragma: nocover
+    async def hello_world() -> typing.AsyncIterator[bytes]:  # pragma: no cover
         yield b"Hello, "
         yield b"world!"
 
@@ -136,7 +143,7 @@ def test_raise_for_status(server):
                 assert exc_info.value.response == response
                 assert exc_info.value.request.url.path == f"/status/{status_code}"
             else:
-                assert response.raise_for_status() is None  # type: ignore
+                assert response.raise_for_status() is response
 
 
 def test_options(server):
@@ -224,8 +231,8 @@ def test_merge_relative_url_with_encoded_slashes():
 
 def test_context_managed_transport():
     class Transport(httpx.BaseTransport):
-        def __init__(self):
-            self.events = []
+        def __init__(self) -> None:
+            self.events: list[str] = []
 
         def close(self):
             # The base implementation of httpx.BaseTransport just
@@ -255,9 +262,9 @@ def test_context_managed_transport():
 
 def test_context_managed_transport_and_mount():
     class Transport(httpx.BaseTransport):
-        def __init__(self, name: str):
+        def __init__(self, name: str) -> None:
             self.name: str = name
-            self.events: typing.List[str] = []
+            self.events: list[str] = []
 
         def close(self):
             # The base implementation of httpx.BaseTransport just
@@ -313,7 +320,7 @@ def test_client_closed_state_using_implicit_open():
     # Once we're closed we cannot reopen the client.
     with pytest.raises(RuntimeError):
         with client:
-            pass  # pragma: nocover
+            pass  # pragma: no cover
 
 
 def test_client_closed_state_using_with_block():
@@ -350,7 +357,7 @@ def test_raw_client_header():
     assert response.json() == [
         ["Host", "example.org"],
         ["Accept", "*/*"],
-        ["Accept-Encoding", "gzip, deflate, br"],
+        ["Accept-Encoding", "gzip, deflate, br, zstd"],
         ["Connection", "keep-alive"],
         ["User-Agent", f"python-httpx/{httpx.__version__}"],
         ["Example-Header", "example-value"],
@@ -398,3 +405,58 @@ def test_server_extensions(server):
         response = client.get(url)
     assert response.status_code == 200
     assert response.extensions["http_version"] == b"HTTP/1.1"
+
+
+def test_client_decode_text_using_autodetect():
+    # Ensure that a 'default_encoding=autodetect' on the response allows for
+    # encoding autodetection to be used when no "Content-Type: text/plain; charset=..."
+    # info is present.
+    #
+    # Here we have some french text encoded with ISO-8859-1, rather than UTF-8.
+    text = (
+        "Non-seulement Despréaux ne se trompait pas, mais de tous les écrivains "
+        "que la France a produits, sans excepter Voltaire lui-même, imprégné de "
+        "l'esprit anglais par son séjour à Londres, c'est incontestablement "
+        "Molière ou Poquelin qui reproduit avec l'exactitude la plus vive et la "
+        "plus complète le fond du génie français."
+    )
+
+    def cp1252_but_no_content_type(request):
+        content = text.encode("ISO-8859-1")
+        return httpx.Response(200, content=content)
+
+    transport = httpx.MockTransport(cp1252_but_no_content_type)
+    with httpx.Client(transport=transport, default_encoding=autodetect) as client:
+        response = client.get("http://www.example.com")
+
+        assert response.status_code == 200
+        assert response.reason_phrase == "OK"
+        assert response.encoding == "ISO-8859-1"
+        assert response.text == text
+
+
+def test_client_decode_text_using_explicit_encoding():
+    # Ensure that a 'default_encoding="..."' on the response is used for text decoding
+    # when no "Content-Type: text/plain; charset=..."" info is present.
+    #
+    # Here we have some french text encoded with ISO-8859-1, rather than UTF-8.
+    text = (
+        "Non-seulement Despréaux ne se trompait pas, mais de tous les écrivains "
+        "que la France a produits, sans excepter Voltaire lui-même, imprégné de "
+        "l'esprit anglais par son séjour à Londres, c'est incontestablement "
+        "Molière ou Poquelin qui reproduit avec l'exactitude la plus vive et la "
+        "plus complète le fond du génie français."
+    )
+
+    def cp1252_but_no_content_type(request):
+        content = text.encode("ISO-8859-1")
+        return httpx.Response(200, content=content)
+
+    transport = httpx.MockTransport(cp1252_but_no_content_type)
+    with httpx.Client(transport=transport, default_encoding=autodetect) as client:
+        response = client.get("http://www.example.com")
+
+        assert response.status_code == 200
+        assert response.reason_phrase == "OK"
+        assert response.encoding == "ISO-8859-1"
+        assert response.text == text

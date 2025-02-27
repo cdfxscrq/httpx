@@ -70,19 +70,19 @@
   * The amount of time elapsed between sending the request and calling `close()` on the corresponding response received for that request.
   [total_seconds()](https://docs.python.org/3/library/datetime.html#datetime.timedelta.total_seconds) to correctly get
   the total elapsed seconds.
-* `def .raise_for_status()` - **None**
+* `def .raise_for_status()` - **Response**
 * `def .json()` - **Any**
 * `def .read()` - **bytes**
-* `def .iter_raw()` - **bytes iterator**
-* `def .iter_bytes()` - **bytes iterator**
-* `def .iter_text()` - **text iterator**
+* `def .iter_raw([chunk_size])` - **bytes iterator**
+* `def .iter_bytes([chunk_size])` - **bytes iterator**
+* `def .iter_text([chunk_size])` - **text iterator**
 * `def .iter_lines()` - **text iterator**
 * `def .close()` - **None**
 * `def .next()` - **Response**
 * `def .aread()` - **bytes**
-* `def .aiter_raw()` - **async bytes iterator**
-* `def .aiter_bytes()` - **async bytes iterator**
-* `def .aiter_text()` - **async text iterator**
+* `def .aiter_raw([chunk_size])` - **async bytes iterator**
+* `def .aiter_bytes([chunk_size])` - **async bytes iterator**
+* `def .aiter_text([chunk_size])` - **async text iterator**
 * `def .aiter_lines()` - **async text iterator**
 * `def .aclose()` - **None**
 * `def .anext()` - **Response**
@@ -114,7 +114,7 @@ what gets sent over the wire.*
 'example.org'
 ```
 
-* `def __init__(url, allow_relative=False, params=None)`
+* `def __init__(url, **kwargs)`
 * `.scheme` - **str**
 * `.authority` - **str**
 * `.host` - **str**
